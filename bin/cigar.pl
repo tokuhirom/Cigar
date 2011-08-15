@@ -35,6 +35,8 @@ sub run {
 
     my $branch = $self->branch;
 
+    my $fail = 0;
+
     $self->log("start testing");
 
     {
@@ -52,10 +54,13 @@ sub run {
         my $report = $self->run_test();
         if ($report) {
             $self->notify($branch, $report);
+            $fail++;
         }
     }
 
     $self->log("end testing");
+
+    return $fail;
 }
 
 sub notify {
@@ -109,7 +114,7 @@ $branch='master' unless $branch;
 
 my $app =
   App::Cigar->new( branch => $branch, base => $base, repo => $repo );
-$app->run();
+exit($app->run());
 
 __END__
 
@@ -117,4 +122,13 @@ __END__
 
     % cigar.pl --repo=git://... --base /path/to/base/dir
     % cigar.pl --repo=git://... --base /path/to/base/dir --branch foo
+
+=head1 DESCRIPTION
+
+超絶簡易的CIツール。 cron でよしなにぐるぐるまわして、fail したら mail とばす、で OK。
+
+    MAILTO=ci@example.com
+    */20 * * * * cronlog --timestamp -- cigar.pl --repo=git://github.com/ikebe/Pickles.git --branch switch_routes --base=/tmp/pickles-ci/
+
+cronlog はこちらからインストールしてください: https://github.com/kazuho/kaztools
 
