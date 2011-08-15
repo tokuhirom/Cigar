@@ -11,6 +11,7 @@ use 5.008008;
 our $VERSION = '0.01';
 use Carp ();
 use File::Spec;
+use File::Path qw(mkpath);
 
 sub base { $_[0]->{base} }
 sub branch { $_[0]->{branch} }
@@ -37,10 +38,11 @@ sub run {
     $self->log("start testing");
 
     {
+        mkpath($self->base);
         chdir($self->base) or die "Cannot chdir(@{[ $self->base ]}): $!";
         my $workdir = $self->dir("work-$branch");
         unless (-d $workdir) {
-            $self->command("git clone --recursive @{[ $self->repo ]} $workdir");
+            $self->command("git clone --recursive --branch $self->{branch} @{[ $self->repo ]} $workdir");
         }
         chdir($workdir) or die "Cannot chdir($workdir): $!";
         $self->command("git pull -f origin $branch");
@@ -114,5 +116,5 @@ __END__
 =head1 SYNOPSIS
 
     % cigar.pl --repo=git://... --base /path/to/base/dir
-    % cigar.pl --repo=git://... --base /path/to/base/dir --branch master --branch foo
+    % cigar.pl --repo=git://... --base /path/to/base/dir --branch foo
 
