@@ -5,9 +5,6 @@ use utf8;
 use 5.008008;
 
 package App::Cigar;
-use strict;
-use warnings;
-use 5.008008;
 our $VERSION = '0.01';
 use Carp ();
 use File::Spec;
@@ -122,6 +119,10 @@ __END__
 
     % cigar.pl --repo=git://... --base /path/to/base/dir
     % cigar.pl --repo=git://... --base /path/to/base/dir --branch foo
+
+        --repo=s   URL for git repository
+        --base=s   Base directory for working
+        --branch=s branch name('master' by default)
 
 =head1 DESCRIPTION
 
