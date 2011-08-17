@@ -52,11 +52,13 @@ sub run {
 
         my $workdir = $self->dir("work-$branch");
         unless (-d $workdir) {
-            $self->command("git clone --recursive --branch $self->{branch} @{[ $self->repo ]} $workdir");
+            $self->command("git clone --branch $self->{branch} @{[ $self->repo ]} $workdir");
         }
         chdir($workdir) or die "Cannot chdir($workdir): $!";
         $self->command("git pull -f origin $branch");
         $self->command("git reset --hard origin/$branch");
+        $self->command("git submodule init");
+        $self->command("git submodule update");
         $self->command("git status");
 
         my $report = $self->run_test();
