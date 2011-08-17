@@ -13,6 +13,7 @@ use LWP::UserAgent;
 use Time::Piece;
 use IPC::Open3;
 use English '-no_match_vars';
+use File::Basename qw(dirname);
 
 sub base            { $_[0]->{base} }
 sub branch          { $_[0]->{branch} }
@@ -48,9 +49,10 @@ sub run {
 
     {
         mkpath($self->base);
+        mkpath($self->dir('work'));
         chdir($self->base) or die "Cannot chdir(@{[ $self->base ]}): $!";
 
-        my $workdir = $self->dir("work-$branch");
+        my $workdir = $self->dir("work", $self->branch);
         unless (-d $workdir) {
             $self->command("git clone --branch $self->{branch} @{[ $self->repo ]} $workdir");
         }
@@ -81,13 +83,15 @@ sub notify {
         my $url = $self->ikachan_url;
         $url =~ s!/$!!; # remove trailing slash
 
-        my $ua = LWP::UserAgent->new(agent => "Cigar/$VERSION");
 		my $message = $report;
         if ( $self->viewer_url ) {
             $message = join( ' ',
                 $self->viewer_url() . '/logs/' . $self->get_logfile_name(),
                 $message );
         }
+        $self->log("Sending message to irc server: $message");
+
+        my $ua = LWP::UserAgent->new(agent => "Cigar/$VERSION");
 		my $res = $ua->post( "$url/notice",
 			{ channel => $self->ikachan_channel, message => $message } );
 		$res->is_success or die join(' ', 'notice', $self->ikachan_url, $self->ikachan_channel, $res->status_line);
@@ -140,6 +144,7 @@ sub logfh {
 	my ($self) = @_;
 	$self->{logfh} ||= do {
 		my $fname = $self->file('logs', $self->get_logfile_name());
+        mkpath(dirname($fname));
 		open my $fh, '>>', $fname or die "Cannot open $fname: $!";
 		$fh;
 	};
@@ -148,13 +153,11 @@ sub logfh {
 sub get_logfile_name {
 	my $self = shift;
 
-    return $self->{logfile_name} ||= (
-        join( '-',
-            $self->branch,
-            Time::Piece->new->strftime('%Y%m%d'),
-            substr( `git rev-parse HEAD`, 0, 10 ),
-            time() )
-          . '.txt'
+    return $self->{logfile_name} ||= File::Spec->catfile(
+        $self->branch,
+        Time::Piece->new->strftime('%Y%m%d'),
+        ( substr( `git rev-parse HEAD`, 0, 10 ) || 'xxx' ) . '-'
+          . time() . '.txt'
     );
 }
 
