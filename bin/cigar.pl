@@ -41,13 +41,15 @@ sub run {
 
     my $fail = 0;
 
+    # make log directory first.
+    mkpath($self->dir('logs'));
+
     $self->log("start testing : " . join(' ', $self->repo, $self->branch));
 
     {
         mkpath($self->base);
         chdir($self->base) or die "Cannot chdir(@{[ $self->base ]}): $!";
 
-        mkpath($self->dir('logs'));
         my $workdir = $self->dir("work-$branch");
         unless (-d $workdir) {
             $self->command("git clone --recursive --branch $self->{branch} @{[ $self->repo ]} $workdir");
@@ -117,7 +119,6 @@ sub tee {
     $self->log("command: $command");
 	my $pid = open(my $fh, '-|');
 	local $SIG{PIPE} = sub { die "whoops, $command pipe broke" };
-	warn "RUN";
 
     if ($pid) {    # parent
         while (<$fh>) {
