@@ -99,9 +99,8 @@ sub run_test {
 
     my $logfilepath = $self->file('logs', $self->get_logfile_name());
 	$self->log("log file name: $logfilepath");
-	my $tee = "2>&1 | tee -a $logfilepath";
     if (-x './bin/test.pl') {
-        system("./bin/test.pl $tee")==0 or return "testing failed: $?";
+        $self->tee("./bin/test.pl 2>&1")==0 or return "test.pl FAIL: $?";
     } else {
         $self->tee("perl Makefile.PL 2>&1")==0 or return "Makefile.PL FAIL: $?";
         $self->tee("make test 2>&1")==0 or return "make test FAIL: $?";
