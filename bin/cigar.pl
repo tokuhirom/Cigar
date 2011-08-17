@@ -10,12 +10,17 @@ use Carp ();
 use File::Spec;
 use File::Path qw(mkpath);
 use LWP::UserAgent;
+use Time::Piece;
+use Digest::MD5;
+use IPC::Open3;
+use English '-no_match_vars';
 
-sub base { $_[0]->{base} }
-sub branch { $_[0]->{branch} }
-sub repo { $_[0]->{repo} }
-sub ikachan_url { $_[0]->{ikachan_url} }
+sub base            { $_[0]->{base} }
+sub branch          { $_[0]->{branch} }
+sub repo            { $_[0]->{repo} }
+sub ikachan_url     { $_[0]->{ikachan_url} }
 sub ikachan_channel { $_[0]->{ikachan_channel} }
+sub viewer_url      { $_[0]->{viewer_url} }
 
 sub new {
     my $class = shift;
@@ -37,11 +42,13 @@ sub run {
 
     my $fail = 0;
 
-    $self->log("start testing");
+    $self->log("start testing : " . join(' ', $self->repo, $self->branch));
 
     {
         mkpath($self->base);
         chdir($self->base) or die "Cannot chdir(@{[ $self->base ]}): $!";
+
+        mkpath($self->dir('logs'));
         my $workdir = $self->dir("work-$branch");
         unless (-d $workdir) {
             $self->command("git clone --recursive --branch $self->{branch} @{[ $self->repo ]} $workdir");
@@ -66,32 +73,85 @@ sub run {
 sub notify {
     my ($self, $branch, $report) = @_;
     warn "NOTIFY : $branch, $report";
+
     if (defined $self->ikachan_url) {
         my $url = $self->ikachan_url;
         $url =~ s!/$!!; # remove trailing slash
 
         my $ua = LWP::UserAgent->new(agent => "Cigar/$VERSION");
-		{
-			my $res = $ua->post( "$url/join",
-				{ channel => $self->ikachan_channel } );
-			$res->code =~ /^(?:20.|403)$/ or die join(' ', 'join', $self->ikachan_url, $self->ikachan_channel, $res->status_line);
-		}
-		{
-			my $res = $ua->post( "$url/notice",
-				{ channel => $self->ikachan_channel, message => $report } );
-			$res->is_success or die join(' ', 'notice', $self->ikachan_url, $self->ikachan_channel, $res->status_line);
-		}
+		my $message = $report;
+        if ( $self->viewer_url ) {
+            $message = join( ' ',
+                $self->viewer_url() . '/logs/' . $self->get_logfile_name(),
+                $message );
+        }
+		my $res = $ua->post( "$url/notice",
+			{ channel => $self->ikachan_channel, message => $message } );
+		$res->is_success or die join(' ', 'notice', $self->ikachan_url, $self->ikachan_channel, $res->status_line);
     }
 }
 
 sub run_test {
     my $self = shift;
+
+    my $logfilepath = $self->file('logs', $self->get_logfile_name());
+	$self->log("log file name: $logfilepath");
+	my $tee = "2>&1 | tee -a $logfilepath";
     if (-x './bin/test.pl') {
-        system('./bin/test.pl')==0 or return "testing failed: $?";
+        system("./bin/test.pl $tee")==0 or return "testing failed: $?";
     } else {
-        system("perl Makefile.PL")==0 or return "Cannot run Makefile.PL: $!";
-        system("make test")==0 or return "make test failed.. $?";
+        $self->tee("perl Makefile.PL 2>&1")==0 or return "Makefile.PL FAIL: $?";
+        $self->tee("make test 2>&1")==0 or return "make test FAIL: $?";
     }
+	return undef;
+}
+
+
+sub command {
+	my $self = shift;
+    $self->log("command: @_");
+	system(@_)==0 or die "@_: $!";
+}
+
+sub tee {
+	my ($self, $command) = @_;
+    $self->log("command: $command");
+	my $pid = open(my $fh, '-|');
+	local $SIG{PIPE} = sub { die "whoops, $command pipe broke" };
+	warn "RUN";
+
+    if ($pid) {    # parent
+        while (<$fh>) {
+            print "XXX: $_";
+			print {$self->logfh} $_;
+        }
+        close($fh) || warn "kid exited $?";
+		return $?;
+    }
+    else {         # child
+        ( $EUID, $EGID ) = ( $UID, $GID );
+        exec( $command );
+        die "can't exec $command $!";
+    }
+}
+
+sub logfh {
+	my ($self) = @_;
+	$self->{logfh} ||= do {
+		my $fname = $self->file('logs', $self->get_logfile_name());
+		open my $fh, '>>', $fname or die "Cannot open $fname: $!";
+		$fh;
+	};
+}
+
+sub get_logfile_name {
+	my $self = shift;
+
+    return $self->{logfile_name} ||=
+      (     $self->branch
+          . Time::Piece->new->strftime('%Y%m%d') . '-'
+          . Digest::MD5::md5_hex( time() . rand() )
+          . '.txt' );
 }
 
 sub file {
@@ -104,15 +164,14 @@ sub dir {
     File::Spec->catdir($self->base, @_);
 }
 
-sub command {
-    my $self = shift;
-    $self->log("command: @_");
-    system(@_)==0 or die "@_: $@";
-}
-
 sub log {
     my $self = shift;
-    print join(' ', '['.$self->branch.']', @_), "\n";
+    my $msg = join( ' ',
+        Time::Piece->new()->strftime('[%Y-%m-%d %H:%M]'),
+        '[' . $self->branch . ']', @_ )
+      . "\n";
+	print STDOUT $msg;
+	print {$self->logfh} $msg;
 }
 
 package main;
@@ -120,23 +179,27 @@ use Getopt::Long;
 use Pod::Usage;
 
 GetOptions(
-    'branch=s' => \my $branch,
-    'base=s'    => \my $base,
-    'repo=s'    => \my $repo,
-    'ikachan_url=s' => \my $ikachan_url,
+    'branch=s'          => \my $branch,
+    'base=s'            => \my $base,
+    'repo=s'            => \my $repo,
+    'ikachan_url=s'     => \my $ikachan_url,
     'ikachan_channel=s' => \my $ikachan_channel,
+    'viewer_url=s'      => \my $viewer_url,
 );
 $base or pod2usage();
 $repo or pod2usage();
 $branch='master' unless $branch;
+die "Bad branch name: $branch" unless $branch =~ /^[A-Za-z0-9_-]+$/; # guard from web
 pod2usage() if $ikachan_url && !$ikachan_channel;
+$viewer_url =~ s!/$!!;
 
 my $app = App::Cigar->new(
     branch          => $branch,
     base            => $base,
     repo            => $repo,
     ikachan_url     => $ikachan_url,
-    ikachan_channel => $ikachan_channel
+    ikachan_channel => $ikachan_channel,
+	viewer_url      => $viewer_url,
 );
 exit($app->run());
 
@@ -147,11 +210,12 @@ __END__
     % cigar.pl --repo=git://... --base /path/to/base/dir
     % cigar.pl --repo=git://... --base /path/to/base/dir --branch foo
 
-        --repo=s    URL for git repository
-        --base=s    Base directory for working
-        --branch=s  branch name('master' by default)
-        --ikachan_url=s API endpoint URL for ikachan
+        --repo=s            URL for git repository
+        --base=s            Base directory for working
+        --branch=s          branch name('master' by default)
+        --ikachan_url=s     API endpoint URL for ikachan
         --ikachan_channel=s channel to post message
+        --viewer_url=s      log viewer url(using app.psgi)
 
 =head1 DESCRIPTION
 
