@@ -192,7 +192,7 @@ GetOptions(
 $base or pod2usage();
 $repo or pod2usage();
 $branch='master' unless $branch;
-die "Bad branch name: $branch" unless $branch =~ /^[A-Za-z0-9_-.]+$/; # guard from web
+die "Bad branch name: $branch" unless $branch =~ /^[A-Za-z0-9._-]+$/; # guard from web
 pod2usage() if $ikachan_url && !$ikachan_channel;
 $viewer_url =~ s!/$!!;
 
