@@ -11,7 +11,6 @@ use File::Spec;
 use File::Path qw(mkpath);
 use LWP::UserAgent;
 use Time::Piece;
-use Digest::MD5;
 use IPC::Open3;
 use English '-no_match_vars';
 
@@ -122,7 +121,7 @@ sub tee {
 
     if ($pid) {    # parent
         while (<$fh>) {
-            print "XXX: $_";
+            print $_;
 			print {$self->logfh} $_;
         }
         close($fh) || warn "kid exited $?";
@@ -147,11 +146,14 @@ sub logfh {
 sub get_logfile_name {
 	my $self = shift;
 
-    return $self->{logfile_name} ||=
-      (     $self->branch
-          . Time::Piece->new->strftime('%Y%m%d') . '-'
-          . Digest::MD5::md5_hex( time() . rand() )
-          . '.txt' );
+    return $self->{logfile_name} ||= (
+        join( '-',
+            $self->branch,
+            Time::Piece->new->strftime('%Y%m%d'),
+            substr( `git rev-parse HEAD`, 0, 10 ),
+            time() )
+          . '.txt'
+    );
 }
 
 sub file {
