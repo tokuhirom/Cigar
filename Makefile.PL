@@ -5,6 +5,7 @@ WriteMakefile(
     AUTHOR        => 'tokuhirom <person@example.com>',
     VERSION_FROM  => 'bin/cigar.pl',
     PREREQ_PM     => {
+		'LWP::UserAgent' => 0,
     },
     MIN_PERL_VERSION => '5.008001',
 	EXE_FILES => [ 'bin/cigar.pl' ],

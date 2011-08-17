@@ -9,10 +9,13 @@ our $VERSION = '0.01';
 use Carp ();
 use File::Spec;
 use File::Path qw(mkpath);
+use LWP::UserAgent;
 
 sub base { $_[0]->{base} }
 sub branch { $_[0]->{branch} }
 sub repo { $_[0]->{repo} }
+sub ikachan_url { $_[0]->{ikachan_url} }
+sub ikachan_channel { $_[0]->{ikachan_channel} }
 
 sub new {
     my $class = shift;
@@ -63,12 +66,28 @@ sub run {
 sub notify {
     my ($self, $branch, $report) = @_;
     warn "NOTIFY : $branch, $report";
+    if (defined $self->ikachan_url) {
+        my $url = $self->ikachan_url;
+        $url =~ s!/$!!; # remove trailing slash
+
+        my $ua = LWP::UserAgent->new(agent => "Cigar/$VERSION");
+		{
+			my $res = $ua->post( "$url/join",
+				{ channel => $self->ikachan_channel } );
+			$res->code =~ /^(?:20.|403)$/ or die join(' ', 'join', $self->ikachan_url, $self->ikachan_channel, $res->status_line);
+		}
+		{
+			my $res = $ua->post( "$url/notice",
+				{ channel => $self->ikachan_channel, message => $report } );
+			$res->is_success or die join(' ', 'notice', $self->ikachan_url, $self->ikachan_channel, $res->status_line);
+		}
+    }
 }
 
 sub run_test {
     my $self = shift;
     if (-x './bin/test.pl') {
-        system('./bin/test.pl');
+        system('./bin/test.pl')==0 or return "testing failed: $?";
     } else {
         system("perl Makefile.PL")==0 or return "Cannot run Makefile.PL: $!";
         system("make test")==0 or return "make test failed.. $?";
@@ -104,13 +123,21 @@ GetOptions(
     'branch=s' => \my $branch,
     'base=s'    => \my $base,
     'repo=s'    => \my $repo,
+    'ikachan_url=s' => \my $ikachan_url,
+    'ikachan_channel=s' => \my $ikachan_channel,
 );
 $base or pod2usage();
 $repo or pod2usage();
 $branch='master' unless $branch;
+pod2usage() if $ikachan_url && !$ikachan_channel;
 
-my $app =
-  App::Cigar->new( branch => $branch, base => $base, repo => $repo );
+my $app = App::Cigar->new(
+    branch          => $branch,
+    base            => $base,
+    repo            => $repo,
+    ikachan_url     => $ikachan_url,
+    ikachan_channel => $ikachan_channel
+);
 exit($app->run());
 
 __END__
@@ -120,9 +147,11 @@ __END__
     % cigar.pl --repo=git://... --base /path/to/base/dir
     % cigar.pl --repo=git://... --base /path/to/base/dir --branch foo
 
-        --repo=s   URL for git repository
-        --base=s   Base directory for working
-        --branch=s branch name('master' by default)
+        --repo=s    URL for git repository
+        --base=s    Base directory for working
+        --branch=s  branch name('master' by default)
+        --ikachan_url=s API endpoint URL for ikachan
+        --ikachan_channel=s channel to post message
 
 =head1 DESCRIPTION
 
@@ -132,4 +161,8 @@ __END__
     */20 * * * * cronlog --timestamp -- cigar.pl --repo=git://github.com/ikebe/Pickles.git --branch switch_routes --base=/tmp/pickles-ci/
 
 cronlog はこちらからインストールしてください: https://github.com/kazuho/kaztools
+
+=head1 SEE ALSO
+
+https://github.com/yappo/p5-App-Ikachan
 
