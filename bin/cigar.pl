@@ -86,7 +86,7 @@ sub notify {
         if ( $self->viewer_url ) {
             $message = join( ' ',
                 $self->viewer_url() . '/logs/' . $self->get_logfile_name(),
-                $message );
+                "[$self->{branch}]", $message );
         }
         $self->log("Sending message to irc server: $message");
 
