@@ -58,7 +58,6 @@ sub run {
         }
         chdir($workdir) or die "Cannot chdir($workdir): $!";
         $self->command("git pull -f origin $branch");
-        $self->command("git reset --hard origin/$branch");
         $self->command("git submodule init");
         $self->command("git submodule update");
         $self->command("git status");
