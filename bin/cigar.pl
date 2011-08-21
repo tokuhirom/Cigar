@@ -104,9 +104,11 @@ sub run_test {
 	$self->log("log file name: $logfilepath");
     if (-x './bin/test.pl') {
         $self->tee("./bin/test.pl 2>&1")==0 or return "test.pl FAIL: $?";
-    } else {
+    } elsif (-f 'Makefile.PL') {
         $self->tee("perl Makefile.PL 2>&1")==0 or return "Makefile.PL FAIL: $?";
         $self->tee("make test 2>&1")==0 or return "make test FAIL: $?";
+    } else {
+        die "There is no Makefile.PL/test.pl";
     }
 	return undef;
 }
@@ -236,3 +238,4 @@ cronlog はこちらからインストールしてください: https://github.c
 
 https://github.com/yappo/p5-App-Ikachan
 
+=cut
