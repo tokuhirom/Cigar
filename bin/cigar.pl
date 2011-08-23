@@ -108,7 +108,7 @@ sub run_test {
         $self->tee("perl Makefile.PL 2>&1")==0 or return "Makefile.PL FAIL: $?";
         $self->tee("make test 2>&1")==0 or return "make test FAIL: $?";
     } else {
-        die "There is no Makefile.PL/test.pl";
+        $self->tee("prove 2>&1")==0 or return "prove FAIL: $?";
     }
 	return undef;
 }
