@@ -45,6 +45,7 @@ sub run {
     # make log directory first.
     mkpath($self->dir('logs'));
 
+    $self->log("cigar $VERSION");
     $self->log("start testing : " . join(' ', $self->repo, $self->branch));
 
     {
